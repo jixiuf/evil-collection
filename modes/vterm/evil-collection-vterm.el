@@ -86,81 +86,30 @@ also uses `evil-mode'."
   (vterm-goto-char (vterm--get-end-of-line))
   (call-interactively #'evil-append))
 
-(evil-define-operator evil-collection-vterm-delete (beg end type register yank-handler)
-  "Modification of evil-delete to work in vterm buffer. 
-Delete text from BEG to END with TYPE.
-Save in REGISTER or in the kill-ring with YANK-HANDLER."
-  (interactive "<R><x><y>")
-  (let* ((beg (max (or beg (point)) (vterm--get-prompt-point)))
-         (end (min (or end beg) (vterm--get-end-of-line))))
-    (unless register
-      (let ((text (filter-buffer-substring beg end)))
-        (unless (string-match-p "\n" text)
-          ;; set the small delete register
-          (evil-set-register ?- text))))
-    (let ((evil-was-yanked-without-register nil))
-      (evil-yank beg end type register yank-handler))
-    (cond
-     ((eq type 'block)
-      (evil-apply-on-block #'vterm-delete-region beg end nil))
-     ((and (eq type 'line)
-           (= end (point-max))
-           (or (= beg end)
-               (/= (char-before end) ?\n))
-           (/= beg (point-min))
-           (=  (char-before beg) ?\n))
-      (vterm-delete-region (1- beg) end))
-     (t
-      (vterm-delete-region beg end)))
-    ;; place cursor on beginning of line
-    (when (and (called-interactively-p 'any)
-               (eq type 'line))
-      (evil-first-non-blank))))
+(defun evil-collection-vterm-delete ()
+  "Provide similar behavior as `evil-delete'."
+  (interactive)
+  (let ((vterm-delete-region-advice-enable t))
+    (call-interactively 'evil-delete)))
 
-(evil-define-operator evil-collection-vterm-delete-backward-char (beg end type register)
+(defun evil-collection-vterm-delete-line ()
+  "Provide similar behavior as `evil-delete-line'."
+  (interactive)
+  (let ((vterm-delete-region-advice-enable t))
+    (call-interactively 'evil-delete-line)))
+
+(defun evil-collection-vterm-delete-char ()
   "Delete previous character."
-  :motion evil-backward-char
-  (interactive "<R><x>")
-  (evil-collection-vterm-delete beg end type register))
+  (interactive)
+  (vterm-goto-char (point))
+  (cl-letf (((symbol-function #'delete-region) #'vterm-delete-region))
+    (call-interactively #'evil-delete-char)))
 
-(evil-define-operator evil-collection-vterm-delete-line (beg end type register yank-handler)
-  "Modification of evil-delete line to work in vterm bufer. Delete to end of line."
-  :motion nil
-  :keep-visual t
-  (interactive "<R><x>")
-  ;; act linewise in Visual state
-  (let* ((beg (or beg (point)))
-         (end (or end beg))
-         (visual-line-mode (and evil-respect-visual-line-mode
-                                visual-line-mode))
-         (line-end (if visual-line-mode
-                       (save-excursion
-                         (end-of-visual-line)
-                         (point))
-                     (line-end-position))))
-    (when (evil-visual-state-p)
-      (unless (memq type '(line screen-line block))
-        (let ((range (evil-expand beg end
-                                  (if visual-line-mode
-                                      'screen-line
-                                    'line))))
-          (setq beg (evil-range-beginning range)
-                end (evil-range-end range)
-                type (evil-type range))))
-      (evil-exit-visual-state))
-    (cond
-     ((eq type 'block)
-      ;; equivalent to $d, i.e., we use the block-to-eol selection and
-      ;; call `evil-collection-vterm-delete'. In this case we fake the call to
-      ;; `evil-end-of-line' by setting `temporary-goal-column' and
-      ;; `last-command' appropriately as `evil-end-of-line' would do.
-      (let ((temporary-goal-column most-positive-fixnum)
-            (last-command 'next-line))
-        (evil-collection-vterm-delete beg end 'block register yank-handler)))
-     ((memq type '(line screen-line))
-      (evil-collection-vterm-delete beg end type register yank-handler))
-     (t
-      (evil-collection-vterm-delete beg line-end type register yank-handler)))))
+(defun evil-collection-vterm-change ()
+  "Provide similar behavior as `evil-change'."
+  (interactive)
+  (let ((vterm-delete-region-advice-enable t))
+    (call-interactively 'evil-change)))
 
 ;;;###autoload
 (defun evil-collection-vterm-setup ()
@@ -205,7 +154,8 @@ Save in REGISTER or in the kill-ring with YANK-HANDLER."
     "A" 'evil-collection-vterm-append-line
     "d" 'evil-collection-vterm-delete
     "D" 'evil-collection-vterm-delete-line
-    "x" 'evil-collection-vterm-delete-backward-char
+    "x" 'evil-collection-vterm-delete-char
+    "c" 'evil-collection-vterm-change
     (kbd "RET") 'vterm-send-return
     "i" 'evil-collection-vterm-insert
     "I" 'evil-collection-vterm-insert-line
@@ -213,7 +163,8 @@ Save in REGISTER or in the kill-ring with YANK-HANDLER."
 
   (evil-collection-define-key 'visual 'vterm-mode-map
     "d" 'evil-collection-vterm-delete
-    "x" 'evil-collection-vterm-delete-backward-char
+    "x" 'evil-collection-vterm-delete-char
+    "c" 'evil-collection-vterm-change
     ))
 (provide 'evil-collection-vterm)
 ;;; evil-collection-vterm.el ends here
